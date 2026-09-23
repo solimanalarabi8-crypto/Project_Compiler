@@ -12,11 +12,14 @@ namespace CompilerCPP {
         std::unordered_map<std::string, double> _variables;
         std::unordered_map<std::string, std::string> _stringVars;
         std::unordered_map<std::string, size_t> _labels;
+        std::vector<std::string> _inputTokens;
+        size_t _inputIndex = 0;
 
         double EvaluateExpr(const std::string& expr);
+        void PrepareInput(const std::string& rawInput);
 
     public:
-        explicit TACInterpreter(std::vector<std::string> tac);
+        explicit TACInterpreter(std::vector<std::string> tac, const std::string& userInput = "");
         std::string Execute();
     };
 

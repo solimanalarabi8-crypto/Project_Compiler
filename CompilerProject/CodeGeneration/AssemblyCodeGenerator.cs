@@ -56,6 +56,11 @@ namespace CompilerProject.CodeGeneration
                 {
                     vars.Add(match.Groups[1].Value);
                 }
+                var readMatch = Regex.Match(line, @"^read\s+(\S+)");
+                if (readMatch.Success)
+                {
+                    vars.Add(readMatch.Groups[1].Value);
+                }
             }
 
             foreach (var v in vars)
@@ -202,6 +207,16 @@ namespace CompilerProject.CodeGeneration
                         localVars.Add(varName);
                     }
                 }
+                var readMatch = Regex.Match(line, @"^read\s+(\S+)");
+                if (readMatch.Success)
+                {
+                    string varName = readMatch.Groups[1].Value;
+                    if (!varIndexMap.ContainsKey(varName))
+                    {
+                        varIndexMap[varName] = localVars.Count;
+                        localVars.Add(varName);
+                    }
+                }
             }
 
             if (localVars.Count > 0)
@@ -231,6 +246,20 @@ namespace CompilerProject.CodeGeneration
                 if (line.StartsWith("goto "))
                 {
                     sb.AppendLine($"    br {line.Substring(5)}");
+                    continue;
+                }
+
+                // Read statement: read x
+                var readMatch = Regex.Match(line, @"^read\s+(\S+)");
+                if (readMatch.Success)
+                {
+                    string varName = readMatch.Groups[1].Value;
+                    if (varIndexMap.TryGetValue(varName, out int targetIdx))
+                    {
+                        sb.AppendLine("    call string [mscorlib]System.Console::ReadLine()");
+                        sb.AppendLine("    call int32 [mscorlib]System.Int32::Parse(string)");
+                        sb.AppendLine($"    stloc {targetIdx}");
+                    }
                     continue;
                 }
 
@@ -411,7 +440,7 @@ namespace CompilerProject.CodeGeneration
             return false;
         }
 
-        public string RunExe(string exePath = "output.exe")
+        public string RunExe(string exePath = "output.exe", string input = "")
         {
             if (!File.Exists(exePath)) return "الملف التنفيذي غير موجود.";
 
@@ -420,8 +449,12 @@ namespace CompilerProject.CodeGeneration
                 var psi = new ProcessStartInfo
                 {
                     FileName = exePath,
+                    RedirectStandardInput = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    StandardInputEncoding = Encoding.UTF8,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
@@ -429,9 +462,36 @@ namespace CompilerProject.CodeGeneration
                 using var process = Process.Start(psi);
                 if (process != null)
                 {
-                    string output = process.StandardOutput.ReadToEnd();
-                    process.WaitForExit(3000);
-                    return output;
+                    string normalized = NormalizeDigits(input);
+                    if (!string.IsNullOrWhiteSpace(normalized))
+                    {
+                        var lines = normalized.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                        foreach (var rawLine in lines)
+                        {
+                            string trimmed = rawLine.Trim();
+                            process.StandardInput.WriteLine(string.IsNullOrEmpty(trimmed) ? "0" : trimmed);
+                        }
+                    }
+                    else
+                    {
+                        process.StandardInput.WriteLine("0");
+                    }
+                    process.StandardInput.Close();
+
+                    var stdoutTask = process.StandardOutput.ReadToEndAsync();
+                    var stderrTask = process.StandardError.ReadToEndAsync();
+
+                    if (process.WaitForExit(3500))
+                    {
+                        string outStr = stdoutTask.Result;
+                        string errStr = stderrTask.Result;
+                        return !string.IsNullOrEmpty(errStr) ? $"{outStr}\n{errStr}" : outStr;
+                    }
+                    else
+                    {
+                        try { process.Kill(); } catch { }
+                        return "⚠️ انتهت مهلة التشغيل (3.5 ثانية) - تأكد من إدخال القيمة المطلوبة في حقل الإدخال.";
+                    }
                 }
             }
             catch (Exception ex)
@@ -440,6 +500,19 @@ namespace CompilerProject.CodeGeneration
             }
 
             return "";
+        }
+
+        private static string NormalizeDigits(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return "";
+            var sb = new StringBuilder();
+            foreach (char c in input)
+            {
+                if (c >= '٠' && c <= '٩') sb.Append((char)('0' + (c - '٠')));
+                else if (c >= '۰' && c <= '۹') sb.Append((char)('0' + (c - '۰')));
+                else sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         private static string FindIlasm()

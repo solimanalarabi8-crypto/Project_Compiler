@@ -19,7 +19,7 @@ namespace CompilerProject.CodeGeneration
     /// </summary>
     public class CompilerRunner
     {
-        public static CompilationResult Compile(string sourceCode, bool isVerbose = true)
+        public static CompilationResult Compile(string sourceCode, bool isVerbose = true, string userInput = "")
         {
             Console.OutputEncoding = Encoding.UTF8;
             var result = new CompilationResult { SourceCode = sourceCode };
@@ -138,7 +138,7 @@ namespace CompilerProject.CodeGeneration
                 bool compiled = asmGen.CompileToExe("output.il", "output.exe");
                 if (compiled)
                 {
-                    result.ExecutionOutput = asmGen.RunExe("output.exe");
+                    result.ExecutionOutput = asmGen.RunExe("output.exe", userInput);
                     result.IsSuccess = true;
                     if (isVerbose)
                     {

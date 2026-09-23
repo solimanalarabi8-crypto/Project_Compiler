@@ -29,7 +29,13 @@ namespace CompilerProject
                 string sourceCode = File.ReadAllText(filePath, Encoding.UTF8);
                 bool jsonMode = args.Length > 1 && (args[1] == "--json" || args[1] == "-j");
 
-                var result = CompilerRunner.Compile(sourceCode, !jsonMode);
+                string userInput = "";
+                if (Console.IsInputRedirected)
+                {
+                    try { userInput = Console.In.ReadToEnd(); } catch { }
+                }
+
+                var result = CompilerRunner.Compile(sourceCode, !jsonMode, userInput);
 
                 if (jsonMode)
                 {

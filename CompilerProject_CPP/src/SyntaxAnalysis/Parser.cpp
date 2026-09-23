@@ -64,7 +64,7 @@ namespace CompilerCPP {
             }
 
             if (Current().Value == "اذا" || Current().Value == "طالما" || Current().Value == "اعد" || Current().Value == "كرر" ||
-                Current().Value == "اطبع" || Current().Value == "اقرا" || Current().Value == "متغير" || Current().Value == "ثابت" || Current().Value == "نوع") {
+                Current().Value == "اطبع" || Current().Value == "اقرا" || Current().Value == "اقرأ" || Current().Value == "اقرء" || Current().Value == "متغير" || Current().Value == "ثابت" || Current().Value == "نوع") {
                 return;
             }
 
@@ -298,7 +298,7 @@ namespace CompilerCPP {
         if (Current().Value == "اعد")    return ParseRepeatUntilStatement();
         if (Current().Value == "كرر")    return ParseForStatement();
         if (Current().Value == "اطبع")   return ParsePrintStatement();
-        if (Current().Value == "اقرا")   return ParseReadStatement();
+        if (Current().Value == "اقرا" || Current().Value == "اقرأ" || Current().Value == "اقرء")   return ParseReadStatement();
         if (Current().Value == "{")      return ParseBlock();
 
         if (Current().Type == TokenType::Identifier) {
@@ -493,10 +493,12 @@ namespace CompilerCPP {
 
     std::shared_ptr<Node> Parser::ParseReadStatement() {
         int line = Current().Line;
-        Advance(); // اقرا
-        Expect("(", "يجب فتح قوس '(' بعد تعليمة 'اقرا'");
+        Advance(); // اقرا / اقرأ / اقرء
+        bool hasParen = Match("(");
         auto varToken = ExpectType(TokenType::Identifier, "يجب كتابة اسم المتغير المراد القراءة إليه");
-        Expect(")", "يجب إغلاق القوس ')' لتعليمة 'اقرا'");
+        if (hasParen) {
+            Expect(")", "يجب إغلاق القوس ')' لتعليمة 'اقرا'");
+        }
         Expect("؛", "يجب إنهاء تعليمة 'اقرا' بفاصلة منقوطة '؛'");
 
         auto readNode = std::make_shared<Node>("ReadStatement", varToken.Value, line);

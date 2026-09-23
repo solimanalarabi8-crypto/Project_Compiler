@@ -5,8 +5,37 @@
 
 namespace CompilerCPP {
 
-    TACInterpreter::TACInterpreter(std::vector<std::string> tac)
-        : _tac(std::move(tac)) {}
+    TACInterpreter::TACInterpreter(std::vector<std::string> tac, const std::string& userInput)
+        : _tac(std::move(tac)) {
+        PrepareInput(userInput);
+    }
+
+    void TACInterpreter::PrepareInput(const std::string& rawInput) {
+        _inputTokens.clear();
+        _inputIndex = 0;
+        if (rawInput.empty()) return;
+
+        std::string normalized;
+        for (size_t i = 0; i < rawInput.size(); ) {
+            unsigned char b1 = static_cast<unsigned char>(rawInput[i]);
+            if (b1 == 0xD9 && i + 1 < rawInput.size()) {
+                unsigned char b2 = static_cast<unsigned char>(rawInput[i + 1]);
+                if (b2 >= 0xA0 && b2 <= 0xA9) {
+                    normalized += (char)('0' + (b2 - 0xA0));
+                    i += 2;
+                    continue;
+                }
+            }
+            normalized += rawInput[i];
+            i++;
+        }
+
+        std::istringstream iss(normalized);
+        std::string token;
+        while (iss >> token) {
+            _inputTokens.push_back(token);
+        }
+    }
 
     double TACInterpreter::EvaluateExpr(const std::string& expr) {
         std::string s = expr;
@@ -150,6 +179,19 @@ namespace CompilerCPP {
                 } else {
                     pc++;
                 }
+            }
+            // Read
+            else if (line.rfind("read ", 0) == 0) {
+                std::string dest = line.substr(5);
+                while (!dest.empty() && dest.front() == ' ') dest.erase(dest.begin());
+                while (!dest.empty() && dest.back() == ' ') dest.pop_back();
+
+                double val = 0.0;
+                if (_inputIndex < _inputTokens.size()) {
+                    val = EvaluateExpr(_inputTokens[_inputIndex++]);
+                }
+                _variables[dest] = val;
+                pc++;
             }
             // Assignment
             else if (line.find("=") != std::string::npos) {

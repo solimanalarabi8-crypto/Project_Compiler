@@ -30,6 +30,15 @@ namespace CompilerCPP {
                     _varOffsets[varName] = symName;
                     ss << "    " << symName << " DD 0\n";
                 }
+            } else if (line.rfind("read ", 0) == 0) {
+                std::string varName = line.substr(5);
+                while (!varName.empty() && varName.back() == ' ') varName.pop_back();
+                while (!varName.empty() && varName.front() == ' ') varName.erase(varName.begin());
+                if (_varOffsets.find(varName) == _varOffsets.end()) {
+                    std::string symName = "v_" + std::to_string(varCount++);
+                    _varOffsets[varName] = symName;
+                    ss << "    " << symName << " DD 0\n";
+                }
             }
         }
 
@@ -47,6 +56,13 @@ namespace CompilerCPP {
                 std::string target = line.substr(gPos + 6);
                 ss << "    ; Cond: " << cond << "\n";
                 ss << "    JNE " << target << "\n";
+            } else if (line.rfind("read ", 0) == 0) {
+                std::string dest = line.substr(5);
+                while (!dest.empty() && dest.back() == ' ') dest.pop_back();
+                while (!dest.empty() && dest.front() == ' ') dest.erase(dest.begin());
+                std::string destVar = _varOffsets.count(dest) ? _varOffsets[dest] : "EAX";
+                ss << "    ; read input into " << dest << "\n";
+                ss << "    MOV " << destVar << ", EAX\n";
             } else if (line.find("=") != std::string::npos) {
                 size_t eqPos = line.find("=");
                 std::string dest = line.substr(0, eqPos);

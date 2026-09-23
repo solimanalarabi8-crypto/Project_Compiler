@@ -9,7 +9,7 @@
 
 namespace CompilerCPP {
 
-    CompilationResult CompilerRunner::Compile(const std::string& sourceCode, bool isVerbose) {
+    CompilationResult CompilerRunner::Compile(const std::string& sourceCode, bool isVerbose, const std::string& userInput) {
         CompilationResult result;
         result.SourceCode = sourceCode;
 
@@ -87,7 +87,7 @@ namespace CompilerCPP {
             result.AssemblyCode = asmGen.GenerateX86Assembly();
             result.CILCode = asmGen.GenerateCIL();
 
-            TACInterpreter interpreter(result.TAC);
+            TACInterpreter interpreter(result.TAC, userInput);
             result.ExecutionOutput = interpreter.Execute();
 
             if (isVerbose) {

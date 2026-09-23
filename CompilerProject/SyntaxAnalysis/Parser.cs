@@ -70,7 +70,7 @@ namespace CompilerProject.SyntaxAnalysis
                     return;
                 }
 
-                if (Current.Value is "اذا" or "طالما" or "اعد" or "كرر" or "اطبع" or "اقرا" or "متغير" or "ثابت" or "نوع" or "اجراء")
+                if (Current.Value is "اذا" or "طالما" or "اعد" or "كرر" or "اطبع" or "اقرا" or "اقرأ" or "اقرء" or "متغير" or "ثابت" or "نوع" or "اجراء")
                 {
                     return;
                 }
@@ -368,14 +368,17 @@ namespace CompilerProject.SyntaxAnalysis
         {
             if (Current.Value == "}") return null;
 
-            // 1. جملة الإدخال: اقرا ( س )
-            if (Current.Value == "اقرا")
+            // 1. جملة الإدخال: اقرا ( س ) أو اقرا س
+            if (Current.Value is "اقرا" or "اقرأ" or "اقرء")
             {
                 int line = Current.Line;
-                Advance();
-                Expect("(", "يجب فتح قوس '(' بعد كلمة 'اقرا'");
+                string kw = Advance().Value;
+                bool hasParen = Match("(");
                 var varNode = ParseAccessVariable();
-                Expect(")", "يجب إغلاق القوس ')' بعد متغير الإدخال");
+                if (hasParen)
+                {
+                    Expect(")", $"يجب إغلاق القوس ')' بعد متغير الإدخال لتعليمة '{kw}'");
+                }
 
                 var readNode = new Node("ReadStatement", line);
                 readNode.AddChild(varNode);

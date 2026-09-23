@@ -42,6 +42,7 @@ namespace LanguageEditor
         private DataGridView _errorsGrid = null!;
         private TabPage _tabErrors = null!;
         private RichTextBox _consoleOutputTextBox = null!;
+        private TextBox _inputTextBox = null!;
 
         // مؤقت التحليل اللحظي التلقائي
         private System.Windows.Forms.Timer _liveAnalysisTimer = null!;
@@ -119,6 +120,7 @@ namespace LanguageEditor
             PopulateExamplesMenu(examplesMenu);
 
             var viewMenu = new ToolStripMenuItem("عرض (View)");
+            viewMenu.DropDownItems.Add("🔄 تحديث الواجهة والتحليل الفوري", null, (s, e) => RefreshInterface());
             viewMenu.DropDownItems.Add("🔤 تبديل اتجاه المحرر (RTL/LTR)", null, (s, e) => ToggleEditorDirection());
             viewMenu.DropDownItems.Add("🧹 مسح كافة المخرجات", null, (s, e) => ClearOutputs());
 
@@ -156,6 +158,14 @@ namespace LanguageEditor
                 Margin = new Padding(2, 2, 8, 2)
             };
 
+            var btnRefresh = new ToolStripButton("🔄 تحديث الواجهة", null, (s, e) => RefreshInterface())
+            {
+                BackColor = Color.FromArgb(108, 117, 125),
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                Margin = new Padding(2, 2, 8, 2)
+            };
+
             var btnDirToggle = new ToolStripButton("🔤 تبديل الاتجاه", null, (s, e) => ToggleEditorDirection());
             var btnClear = new ToolStripButton("🧹 مسح المخرجات", null, (s, e) => ClearOutputs());
 
@@ -177,7 +187,7 @@ namespace LanguageEditor
             {
                 btnNew, btnOpen, btnSave,
                 new ToolStripSeparator(),
-                btnRun, btnCompile,
+                btnRun, btnCompile, btnRefresh,
                 new ToolStripSeparator(),
                 engineLabel, _compilerEngineCombo,
                 new ToolStripSeparator(),
@@ -259,7 +269,65 @@ namespace LanguageEditor
                 RightToLeft = RightToLeft.Yes,
                 ReadOnly = true
             };
+
+            // لوحة إدخال المستخدم للتعليمة اقرا (User Keyboard Input)
+            var inputPanel = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 46,
+                BackColor = Color.FromArgb(28, 28, 30),
+                Padding = new Padding(6, 6, 6, 6)
+            };
+
+            var btnSendInput = new Button
+            {
+                Dock = DockStyle.Left,
+                Width = 150,
+                Text = "📤 إدخال وتشغيل (Enter)",
+                BackColor = Color.FromArgb(0, 122, 204),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btnSendInput.FlatAppearance.BorderSize = 0;
+            btnSendInput.Click += (s, e) => CompileAndRun();
+
+            var lblInput = new Label
+            {
+                Dock = DockStyle.Right,
+                Width = 180,
+                Text = "⌨️ مدخلات البرنامج (اقرا):",
+                ForeColor = Color.FromArgb(230, 230, 230),
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleRight
+            };
+
+            _inputTextBox = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font("Consolas", 11F, FontStyle.Regular),
+                BackColor = Color.FromArgb(45, 45, 48),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                PlaceholderText = "اكتب هنا الأرقام أو القيم للإدخال عند تنفيذ تعليمة اقرا (مثل: 50)... ثم اضغط Enter أو F5"
+            };
+            _inputTextBox.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    CompileAndRun();
+                    e.Handled = true;
+                    e.SuppressKeyPress = true;
+                }
+            };
+
+            inputPanel.Controls.Add(_inputTextBox);
+            inputPanel.Controls.Add(btnSendInput);
+            inputPanel.Controls.Add(lblInput);
+
             tabConsole.Controls.Add(_consoleOutputTextBox);
+            tabConsole.Controls.Add(inputPanel);
 
             // 2. تبويب الرموز المعجمية
             var tabTokens = new TabPage("📑 الرموز المعجمية (Tokens)");
@@ -666,6 +734,7 @@ namespace LanguageEditor
                         Arguments = $"\"{tempSourceFile}\" --json",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
+                        RedirectStandardInput = true,
                         UseShellExecute = false,
                         CreateNoWindow = true,
                         StandardOutputEncoding = Encoding.UTF8
@@ -674,6 +743,12 @@ namespace LanguageEditor
                     using var process = Process.Start(psi);
                     if (process != null)
                     {
+                        if (!string.IsNullOrEmpty(_inputTextBox.Text))
+                        {
+                            process.StandardInput.WriteLine(_inputTextBox.Text);
+                        }
+                        process.StandardInput.Close();
+
                         string jsonOutput = process.StandardOutput.ReadToEnd();
                         process.WaitForExit(5000);
 
@@ -696,7 +771,7 @@ namespace LanguageEditor
             // 2. استخدام المترجم المدمج مباشرة لضمان أعلى دقة وتزامن لحظي
             if (result == null)
             {
-                result = CompilerRunner.Compile(_codeEditor.Text, isVerbose: false);
+                result = CompilerRunner.Compile(_codeEditor.Text, isVerbose: false, userInput: _inputTextBox?.Text ?? "");
             }
 
             DisplayCompilationResult(result, isExecutionRun: true);
@@ -798,9 +873,17 @@ namespace LanguageEditor
                 _consoleOutputTextBox.ForeColor = Color.FromArgb(0, 255, 120);
                 if (isExecutionRun)
                 {
-                    _consoleOutputTextBox.Text = string.IsNullOrEmpty(result.ExecutionOutput) 
+                    var runSb = new StringBuilder();
+                    if (!string.IsNullOrWhiteSpace(_inputTextBox?.Text))
+                    {
+                        runSb.AppendLine($"[📥 مدخلات المستخدم المسندة لتعليمة اقرا: {_inputTextBox.Text.Trim()}]");
+                        runSb.AppendLine("═══════════════════════════════════════════════════════════════════════");
+                    }
+                    runSb.Append(string.IsNullOrEmpty(result.ExecutionOutput) 
                         ? "(اكتملت الترجمة بنجاح ولم ينتج البرنامج مخرجات طباعة)" 
-                        : result.ExecutionOutput;
+                        : result.ExecutionOutput);
+
+                    _consoleOutputTextBox.Text = runSb.ToString();
 
                     _statusLabel.Text = "✔️ تمت الترجمة بنجاح وتم تشغيل البرنامج التنفيذي";
                     _outputTabControl.SelectedTab = _outputTabControl.TabPages[0]; // شاشة التشغيل
@@ -866,25 +949,41 @@ namespace LanguageEditor
             return treeNode;
         }
 
+        private void RefreshInterface()
+        {
+            _statusLabel.Text = "جاري تحديث الواجهة والتحليل اللحظي...";
+            UpdateLineNumbers();
+            _lineNumbersPanel.Invalidate();
+            _codeEditor.Invalidate();
+            RunLiveAnalysis();
+            _statusLabel.Text = "تم تحديث الواجهة والتحليل اللحظي بنجاح ✔️";
+        }
+
         private string FindCompilerExe()
         {
             bool isCpp = (_compilerEngineCombo == null || _compilerEngineCombo.SelectedIndex == 0);
             string targetExe = isCpp ? "CompilerProject_CPP.exe" : "CompilerProject.exe";
 
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string currDir = Directory.GetCurrentDirectory();
+
             string[] possiblePaths = new[]
             {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, targetExe),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", isCpp ? "CompilerProject_CPP" : "CompilerProject\\bin\\Debug\\net9.0", targetExe),
-                Path.Combine(Directory.GetCurrentDirectory(), targetExe),
-                Path.Combine(Directory.GetCurrentDirectory(), isCpp ? "CompilerProject_CPP" : "CompilerProject\\bin\\Debug\\net9.0", targetExe),
-                $@"d:\IT FILES\level 4\مترجمات\نظري\مشروع\CompilerProject_CPP\{targetExe}",
-                $@"d:\IT FILES\level 4\مترجمات\نظري\مشروع\CompilerProject\bin\Debug\net9.0\{targetExe}",
-                $@"d:\IT FILES\level 4\مترجمات\نظري\مشروع\تسليم_المشروع_Final_Delivery\PREXE_SingleFile\{targetExe}"
+                Path.Combine(baseDir, targetExe),
+                Path.Combine(baseDir, "..", "..", "..", "..", isCpp ? "CompilerProject_CPP" : "CompilerProject\\bin\\Debug\\net9.0", targetExe),
+                Path.Combine(baseDir, "..", "..", isCpp ? "CompilerProject_CPP" : "CompilerProject\\bin\\Debug\\net9.0", targetExe),
+                Path.Combine(currDir, targetExe),
+                Path.Combine(currDir, isCpp ? "CompilerProject_CPP" : "CompilerProject\\bin\\Debug\\net9.0", targetExe),
+                $@"C:\Users\ZAINON\Desktop\المترجمات عملي\project_combilar\arabic-language-compiler\{(isCpp ? "CompilerProject_CPP" : "CompilerProject\\bin\\Debug\\net9.0")}\{targetExe}"
             };
 
             foreach (var p in possiblePaths)
             {
-                if (File.Exists(p)) return Path.GetFullPath(p);
+                try
+                {
+                    if (File.Exists(p)) return Path.GetFullPath(p);
+                }
+                catch { }
             }
 
             return "";
